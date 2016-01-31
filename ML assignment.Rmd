@@ -1,0 +1,145 @@
+---
+title: "PML Coursera"
+output: html_document
+---
+### 1. Introduction
+
+This report aims to present the result of an exercise done as an evaluation task for the Practical Machine Learning course, made avaiable by the Johns Hopkins University at Coursera's website.
+
+The exercise consists in two major setps: a) build and evaluate a prediction model of a certain variable in a data set using techniques of machine learning; b) predic the results of that variable in another data set using the model developed in the first step.
+
+The two data sets provided to perform the task were produced by the Human Activity Recognition (HAR), a group of reseachers devoted to study artificial intelligence. The data (Ugulino and others, 2012) is constituted by records obtained from devices that measure how well certain human movements are performed. These devices were accelerometers attached on four parts of the body of six participants of a experiment: belt, forearm, arm, and dumbell. They were asked to perform barbell lifts correctly and incorrectly in five different ways: one correct (variable "classe"="A") and four incorrect (variable "classe"="B", "C", "D" and "E").
+
+### 2. Setting the evironment
+
+In order to perform the task, it is necessary to load the packages Caret, .... and its dependecies.
+
+```{r}
+library(caret)
+library(randomForest)
+```
+
+### 3. Loading and inspecting data sets
+ 
+The next step consists in loading the two data sets: "pml-training.csv" to develop the prediction model and "pml-testing.csv" to perform predictions of 20 cases.
+
+```{r}
+# Select "pml-training.csv" file in your computer
+train <- read.csv(file.choose(), header=TRUE)
+dim(train)
+# Select "pml-testing.csv" file in your computer
+test <-  read.csv(file.choose(), header=TRUE)
+dim(test)
+```
+
+The data set "train" have 19.622 rows and 160 columns/variables, while "test" 20 rows and the same number os columns/variables.
+
+By reading the data documentation and inspecting the two data sets using commands "head(data set)", "tail(data set)" and "str(data set)", whose results were not reproduced here by space restriction, we noted that:
+
+a) Column 1 shows the  numbers of the cases (row numbers);
+b) Columns 2 to 7 presents information on the participants and the sensors used;
+c) some columns are composed wholly or partly of NA values.
+
+### 4. Cleaning data
+
+For the purpose of building the prediction model, it is necessary to remove some columns with the view to keep only that containing data provided by the sensors.
+
+At first, we delete columns 1 to 7.
+
+```{r}
+train.clean <- train[ ,-c(1:7)]
+dim(train.clean)
+test.clean <- test[ ,-c(1:7)]
+dim(test.clean)
+```
+
+Both data sets have its column numbers reduced to 160 to 153.
+
+The next step is the removal of columns containing NAs values.
+
+```{r}
+# Based upon a code presented in web page: Big Computing (2014)
+train.clean.2<-apply(!is.na(train.clean),2,sum)>19621
+train.clean <- train.clean[ , train.clean.2]
+dim(train.clean)
+test.clean <- test.clean[ , train.clean.2]
+dim(test.clean)
+```
+
+Both data sets have its column numbers reduced from 153 to 86.
+
+Finally, we should remove the near zero variance columns, because they provide irrelevant or no information to discriminate cases.
+
+```{r}
+# Based upon a code presented in web page: The Caret Package (2015)
+nzv <- nearZeroVar(train.clean, saveMetrics=FALSE)
+train.clean <- train.clean[, -nzv]
+dim(train.clean)
+test.clean <- test.clean[, -nzv]
+dim(test.clean)
+```
+
+As a result, both data sets have only data provided by the sensors with important information for discriminating cases, and the variable "classe".
+
+### 5. Creating data partitions
+
+It is necessary to split the data set "train.clean" in two subsets: "trainer" and "tester", in order to perform the cross-validation procedure and the development of the prediction model. It is important not to confuse the data sets "test" and "tester". The first will be used to predict the 20 values, the final step of this excercise; the last is a subset of "train.clean" to be used in the out-of-data evaluation of the model.
+
+Data set "trainer" comprises 70% of "train.clean", and data set "tester" the remaining 30%.
+
+```{r}
+partition <- createDataPartition(y=train.clean$classe, p=0.7, list=FALSE)
+trainer <- train.clean[partition, ]
+dim(trainer)
+tester <- train.clean[-partition, ]
+dim(tester)
+```
+
+Data set "trainer" has 13.737 rows and 53 columns, while "tester" compraises 5.885 rows and the same numbers of columns.
+
+### 6. Building the prediction model
+
+Now its time to build the prediction model based upon the random forest method, using the "trainer" data set to the training task. Cross-validated with five folds was the resampling method. The column "class" is the dependent variable and the other 52 variables, that contain the measurements of the sensors, are the predictor (independent) variables.
+
+```{r}
+model <- train(classe ~ ., data=trainer, method="rf", 
+                trControl=trainControl(method="cv", number=5),
+                prox=TRUE,allowParallel=FALSE)
+print(model)
+print(model$finalModel)
+confusionMatrix(model)
+var.imp <- varImp(model, scale = FALSE)
+var.imp
+plot(var.imp, top = 10)
+```
+
+Training results are pretty good: high values of accuracy and Kappa statistic. The estimate of error rate (OOB) is very low. confusion matrix shows few cases misclassified. The most important variable are:"roll_belt", "pitch_forearm", "yaw_belt", "magnet_dumbbell_z" and "magnet_dumbbell_y".
+
+### 7. Testing the model
+
+In sequence, we predict the values of "classe" in the data set "tester" for the purpose of estimating the out-of-sample error.
+
+```{r}
+tester.predict <- predict(model, tester)
+confusionMatrix(tester.predict, tester$classe)
+
+```
+
+The test results are also pretty good: high values of accuracy and Kappa statistic and low estimate of error rate. So, the model fits the data well.
+
+### 8. Final prediction
+
+The exercise ends with the prediction of the 20 cases in the data set "test".
+
+```{r}
+test.predict <- predict(model, test)
+test.predict
+```
+
+### References
+
+Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6.
+
+The Caret Package (2015). Retrieved from http://topepo.github.io/caret/index.html
+
+Big Computing (2014). Retrieved from http://bigcomputing.blogspot.com.br/2014/10/an-example-of-using-random-forest-in.html
